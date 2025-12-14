@@ -229,6 +229,53 @@ async function run() {
             });
             res.send({ url: session.url });
         });
+        app.patch('/payment-success', async (req, res) => {
+            const sessionId = req.query.session_id;
+            const session = await stripe.checkout.sessions.retrieve(sessionId);
+            const transactionId = session.payment_intent;
+            const type = session.metadata.type;
+
+            const paymentExist = await paymentCollection.findOne({ transactionId });
+            if (paymentExist) {
+                return res.send({ message: 'already exists', transactionId });
+            }
+
+            if (session.payment_status === 'paid') {
+                const payment = {
+                    amount: session.amount_total / 100,
+                    currency: session.currency,
+                    customerEmail: session.customer_email,
+                    transactionId,
+                    paymentStatus: session.payment_status,
+                    paidAt: new Date(),
+                    type,
+                    metadata: session.metadata
+                };
+                
+                await paymentCollection.insertOne(payment);
+
+                if (type === 'boost') {
+                    const issueId = session.metadata.issueId;
+                   
+                    const updateIssue = { $set: { priority: 'High', lastUpdatedAt: new Date() } };
+                    await issuesCollection.updateOne({ _id: new ObjectId(issueId) }, updateIssue);
+
+                    
+                    await logTracking(issuesCollection, trackingCollection, issueId, 'Pending', 'Issue priority boosted via payment', 'Citizen', session.customer_email);
+                    
+                    return res.send({ success: true, type: 'boost', issueId, transactionId });
+
+                } else if (type === 'subscription') {
+                    const userEmail = session.metadata.userEmail;
+                   
+                    const updateUser = { $set: { isPremium: true, subscriptionDate: new Date() } };
+                    await userCollection.updateOne({ email: userEmail }, updateUser);
+
+                    return res.send({ success: true, type: 'subscription', userEmail, transactionId });
+                }
+            }
+            return res.send({ success: false });
+        });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
