@@ -25,6 +25,7 @@ async function run() {
 
     const db = client.db("issue_report_db");
     const userCollection = db.collection("users");
+    const issuesCollection = db.collection('issues');
 
     app.post('/users', async (req, res) => {
             const user = req.body;
@@ -42,6 +43,37 @@ async function run() {
             user.createdAt = new Date();
             
             const result = await userCollection.insertOne(user);
+            res.send(result);
+        });
+
+        app.post('/issues', async (req, res) => {
+            const issue = req.body;
+            const userEmail = req.decoded_email;
+            
+            const user = await userCollection.findOne({ email: userEmail });
+
+            if (!user.isPremium && user.issueCount >= 3) {
+                return res.status(403).send({ message: 'Free user issue limit reached.' });
+            }
+
+            issue.status = 'Pending';
+            issue.priority = 'Normal';
+            issue.upvotes = 0;
+            issue.citizenEmail = userEmail;
+            issue.createdAt = new Date();
+            issue.lastUpdatedAt = new Date();
+            
+            const result = await issuesCollection.insertOne(issue);
+
+           
+            const issueId = result.insertedId.toString();
+            await logTracking(issuesCollection, trackingCollection, issueId, 'Pending', 'Issue reported by citizen', 'Citizen', user.displayName);
+
+            
+            if (!user.isPremium) {
+                await userCollection.updateOne({ email: userEmail }, { $inc: { issueCount: 1 } });
+            }
+
             res.send(result);
         });
     // Send a ping to confirm a successful connection
