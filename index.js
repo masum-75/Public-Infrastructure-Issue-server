@@ -352,6 +352,10 @@ async function run() {
             };
             res.send(stats);
         });
+        app.get('/users/all', verifyFBToken, verifyAdmin, async (req, res) => {
+            const users = await userCollection.find({ role: { $ne: 'admin' } }).sort({ createdAt: -1 }).toArray();
+            res.send(users);
+        });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
