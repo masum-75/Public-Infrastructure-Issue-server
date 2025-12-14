@@ -287,6 +287,29 @@ async function run() {
             const issues = await issuesCollection.find(query).sort({ createdAt: -1 }).toArray();
             res.send(issues);
         });
+        
+        app.delete('/dashboard/my-issues/:id', verifyFBToken, async (req, res) => {
+            const id = req.params.id;
+            const userEmail = req.decoded_email;
+            const query = { _id: new ObjectId(id), citizenEmail: userEmail, status: 'Pending' };
+
+            const issue = await issuesCollection.findOne(query);
+            if (!issue) {
+                return res.status(403).send({ message: 'Cannot delete issue or issue status is not Pending' });
+            }
+            
+            
+            await trackingCollection.deleteMany({ issueId: new ObjectId(id) });
+            const result = await issuesCollection.deleteOne(query);
+            
+            
+            const user = await userCollection.findOne({ email: userEmail });
+            if (user && !user.isPremium) {
+                await userCollection.updateOne({ email: userEmail }, { $inc: { issueCount: -1 } });
+            }
+
+            res.send(result);
+        });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
