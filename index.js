@@ -26,6 +26,7 @@ async function run() {
     const db = client.db("issue_report_db");
     const userCollection = db.collection("users");
     const issuesCollection = db.collection('issues');
+    const trackingCollection = db.collection('trackings');
     const upvoteCollection = db.collection('upvotes');
 
     app.get('/users/:email/role', async (req, res) => {
@@ -162,6 +163,14 @@ async function run() {
             await upvoteCollection.insertOne(upvoteRecord);
 
             res.send(updateResult);
+        });
+
+        app.get('/trackings/:issueId/logs', async (req, res) => {
+            const issueId = req.params.issueId;
+            const query = { issueId: new ObjectId(issueId) };
+          
+            const result = await trackingCollection.find(query).sort({ createdAt: -1 }).toArray(); 
+            res.send(result);
         });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
