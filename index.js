@@ -3,6 +3,7 @@ const cors = require("cors");
 const app = express();
 require("dotenv").config();
 const { MongoClient, ServerApiVersion } = require("mongodb");
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
 const port = process.env.PORT || 3000;
 
 // middleWare
@@ -27,6 +28,7 @@ async function run() {
     const userCollection = db.collection("users");
     const issuesCollection = db.collection('issues');
     const trackingCollection = db.collection('trackings');
+    const paymentCollection = db.collection('payments');
     const upvoteCollection = db.collection('upvotes');
 
     app.get('/users/:email/role', async (req, res) => {
@@ -171,6 +173,34 @@ async function run() {
           
             const result = await trackingCollection.find(query).sort({ createdAt: -1 }).toArray(); 
             res.send(result);
+        });
+        app.post('/boost-checkout-session', verifyFBToken, async (req, res) => {
+            const { issueId, title, cost } = req.body;
+            const amount = parseInt(cost) * 100; // 100 Taka (example cost)
+
+            const session = await stripe.checkout.sessions.create({
+                line_items: [
+                    {
+                        price_data: {
+                            currency: 'usd', // Use USD as per your previous code, or set up Taka/local currency
+                            unit_amount: amount,
+                            product_data: {
+                                name: `Boost Priority for Issue: ${title}`
+                            }
+                        },
+                        quantity: 1,
+                    },
+                ],
+                mode: 'payment',
+                metadata: {
+                    issueId,
+                    type: 'boost'
+                },
+                customer_email: req.decoded_email,
+                success_url: `${process.env.CLIENT_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: `${process.env.CLIENT_DOMAIN}/dashboard/payment-cancelled`,
+            });
+            res.send({ url: session.url });
         });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
