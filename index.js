@@ -89,6 +89,16 @@ async function run() {
             next();
         }
 
+        const verifyBlocked = async (req, res, next) => {
+            const email = req.decoded_email;
+            const query = { email };
+            const user = await userCollection.findOne(query);
+            if (user && user.isBlocked) {
+                return res.status(403).send({ message: 'user is blocked' });
+            }
+            next();
+        }
+
     app.get('/users/:email/role', async (req, res) => {
             const email = req.params.email;
             const query = { email };
