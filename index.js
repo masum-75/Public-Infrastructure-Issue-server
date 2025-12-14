@@ -27,6 +27,18 @@ async function run() {
     const userCollection = db.collection("users");
     const issuesCollection = db.collection('issues');
 
+    app.get('/users/:email/role', async (req, res) => {
+            const email = req.params.email;
+            const query = { email };
+            const user = await userCollection.findOne(query);
+            res.send({ 
+                role: user?.role || 'citizen',
+                isPremium: user?.isPremium || false,
+                isBlocked: user?.isBlocked || false,
+                displayName: user?.displayName
+            });
+        });
+
     app.post('/users', async (req, res) => {
             const user = req.body;
             const email = user.email;
