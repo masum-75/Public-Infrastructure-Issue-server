@@ -174,15 +174,15 @@ async function run() {
             const result = await trackingCollection.find(query).sort({ createdAt: -1 }).toArray(); 
             res.send(result);
         });
-        app.post('/boost-checkout-session', verifyFBToken, async (req, res) => {
+        app.post('/boost-checkout-session',  async (req, res) => {
             const { issueId, title, cost } = req.body;
-            const amount = parseInt(cost) * 100; // 100 Taka (example cost)
+            const amount = parseInt(cost) * 100; 
 
             const session = await stripe.checkout.sessions.create({
                 line_items: [
                     {
                         price_data: {
-                            currency: 'usd', // Use USD as per your previous code, or set up Taka/local currency
+                            currency: 'usd', 
                             unit_amount: amount,
                             product_data: {
                                 name: `Boost Priority for Issue: ${title}`
@@ -195,6 +195,33 @@ async function run() {
                 metadata: {
                     issueId,
                     type: 'boost'
+                },
+                customer_email: req.decoded_email,
+                success_url: `${process.env.CLIENT_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: `${process.env.CLIENT_DOMAIN}/dashboard/payment-cancelled`,
+            });
+            res.send({ url: session.url });
+        });
+        app.post('/subscription-checkout-session',  async (req, res) => {
+            const { cost } = req.body;
+            const amount = parseInt(cost) * 100; 
+            const session = await stripe.checkout.sessions.create({
+                line_items: [
+                    {
+                        price_data: {
+                            currency: 'usd',
+                            unit_amount: amount,
+                            product_data: {
+                                name: `Premium Citizen Subscription`
+                            }
+                        },
+                        quantity: 1,
+                    },
+                ],
+                mode: 'payment',
+                metadata: {
+                    userEmail: req.decoded_email,
+                    type: 'subscription'
                 },
                 customer_email: req.decoded_email,
                 success_url: `${process.env.CLIENT_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
