@@ -26,6 +26,7 @@ async function run() {
     const db = client.db("issue_report_db");
     const userCollection = db.collection("users");
     const issuesCollection = db.collection('issues');
+    const upvoteCollection = db.collection('upvotes');
 
     app.get('/users/:email/role', async (req, res) => {
             const email = req.params.email;
@@ -111,7 +112,7 @@ async function run() {
             
             res.send({ issues, total, currentPage: parseInt(page), totalPages: Math.ceil(total / parseInt(limit)) });
         });
-        app.get('/issues/:id', verifyFBToken, async (req, res) => {
+        app.get('/issues/:id',  async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const issue = await issuesCollection.findOne(query);
@@ -128,6 +129,39 @@ async function run() {
             }
 
             res.send({ ...issue, hasUpvoted });
+        });
+
+        app.patch('/issues/:id/upvote', async (req, res) => {
+            const id = req.params.id;
+            const userEmail = req.decoded_email;
+            
+            const issue = await issuesCollection.findOne({ _id: new ObjectId(id) });
+            if (!issue) {
+                return res.status(404).send({ message: 'Issue not found' });
+            }
+
+            if (issue.citizenEmail === userEmail) {
+                 return res.status(403).send({ message: 'Cannot upvote your own issue' });
+            }
+            
+            const upvoteQuery = { issueId: id, userEmail };
+            const existingUpvote = await upvoteCollection.findOne(upvoteQuery);
+            
+            if (existingUpvote) {
+                return res.status(409).send({ message: 'Already upvoted' });
+            }
+
+           
+            const updateResult = await issuesCollection.updateOne(
+                { _id: new ObjectId(id) },
+                { $inc: { upvotes: 1 } }
+            );
+
+            
+            const upvoteRecord = { issueId: id, userEmail, createdAt: new Date() };
+            await upvoteCollection.insertOne(upvoteRecord);
+
+            res.send(updateResult);
         });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
