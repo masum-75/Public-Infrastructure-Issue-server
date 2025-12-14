@@ -99,6 +99,24 @@ async function run() {
             
             res.send({ issues, total, currentPage: parseInt(page), totalPages: Math.ceil(total / parseInt(limit)) });
         });
+        app.get('/issues/:id', verifyFBToken, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const issue = await issuesCollection.findOne(query);
+            
+            if (!issue) {
+                return res.status(404).send({ message: 'Issue not found' });
+            }
+
+            let hasUpvoted = false;
+            const upvoteQuery = { issueId: id, userEmail: req.decoded_email };
+            const existingUpvote = await upvoteCollection.findOne(upvoteQuery);
+            if (existingUpvote) {
+                hasUpvoted = true;
+            }
+
+            res.send({ ...issue, hasUpvoted });
+        });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
