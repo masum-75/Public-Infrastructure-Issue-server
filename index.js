@@ -76,6 +76,29 @@ async function run() {
 
             res.send(result);
         });
+        app.get('/issues/all', async (req, res) => {
+            const { search, category, status, priority, page = 1, limit = 10 } = req.query;
+            const skip = (parseInt(page) - 1) * parseInt(limit);
+            const query = {};
+
+            if (search) {
+                query.$or = [
+                    { title: { $regex: search, $options: 'i' } },
+                    { location: { $regex: search, $options: 'i' } }
+                ];
+            }
+            if (category) { query.category = category; }
+            if (status) { query.status = status; }
+            if (priority) { query.priority = priority; }
+            
+            
+            const sortOptions = { priority: -1, lastUpdatedAt: -1 }; 
+
+            const issues = await issuesCollection.find(query).sort(sortOptions).skip(skip).limit(parseInt(limit)).toArray();
+            const total = await issuesCollection.countDocuments(query);
+            
+            res.send({ issues, total, currentPage: parseInt(page), totalPages: Math.ceil(total / parseInt(limit)) });
+        });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
