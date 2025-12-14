@@ -276,6 +276,17 @@ async function run() {
             }
             return res.send({ success: false });
         });
+        app.get('/dashboard/my-issues',  async (req, res) => {
+            const citizenEmail = req.decoded_email;
+            const query = { citizenEmail };
+            const { status, category } = req.query;
+
+            if (status) { query.status = status; }
+            if (category) { query.category = category; }
+
+            const issues = await issuesCollection.find(query).sort({ createdAt: -1 }).toArray();
+            res.send(issues);
+        });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
