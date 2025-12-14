@@ -287,8 +287,8 @@ async function run() {
             const issues = await issuesCollection.find(query).sort({ createdAt: -1 }).toArray();
             res.send(issues);
         });
-        
-        app.delete('/dashboard/my-issues/:id', verifyFBToken, async (req, res) => {
+
+        app.delete('/dashboard/my-issues/:id',  async (req, res) => {
             const id = req.params.id;
             const userEmail = req.decoded_email;
             const query = { _id: new ObjectId(id), citizenEmail: userEmail, status: 'Pending' };
@@ -306,6 +306,34 @@ async function run() {
             const user = await userCollection.findOne({ email: userEmail });
             if (user && !user.isPremium) {
                 await userCollection.updateOne({ email: userEmail }, { $inc: { issueCount: -1 } });
+            }
+
+            res.send(result);
+        });
+
+        app.patch('/dashboard/my-issues/:id',  async (req, res) => {
+            const id = req.params.id;
+            const userEmail = req.decoded_email;
+            const updatedIssue = req.body;
+            
+            const filter = { _id: new ObjectId(id), citizenEmail: userEmail, status: 'Pending' };
+            const issue = await issuesCollection.findOne(filter);
+            
+            if (!issue) {
+                return res.status(403).send({ message: 'Cannot edit issue or issue status is not Pending' });
+            }
+
+            const updatedDoc = {
+                $set: {
+                    ...updatedIssue,
+                    lastUpdatedAt: new Date(),
+                }
+            };
+
+            const result = await issuesCollection.updateOne(filter, updatedDoc);
+
+            if (result.modifiedCount > 0) {
+                await logTracking(issuesCollection, trackingCollection, id, 'Pending', 'Issue information updated by citizen', 'Citizen', issue.citizenName);
             }
 
             res.send(result);
