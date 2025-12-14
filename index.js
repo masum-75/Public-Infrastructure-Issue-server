@@ -4,7 +4,12 @@ const app = express();
 require("dotenv").config();
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
+const admin = require("firebase-admin");
 const port = process.env.PORT || 3000;
+
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8');
+const serviceAccount = JSON.parse(decoded);
+admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 
 // middleWare
 
@@ -19,6 +24,20 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+const verifyFBToken = async (req, res, next) => {
+    const token = req.headers.authorization;
+    if (!token) {
+        return res.status(401).send({ message: 'unauthorized access' });
+    }
+    try {
+        const idToken = token.split(' ')[1];
+        const decoded = await admin.auth().verifyIdToken(idToken);
+        req.decoded_email = decoded.email;
+        next();
+    } catch (err) {
+        return res.status(401).send({ message: 'unauthorized access' });
+    }
+}
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
