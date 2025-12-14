@@ -5,7 +5,7 @@ require("dotenv").config();
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
 const admin = require("firebase-admin");
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5000;
 
 const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8');
 const serviceAccount = JSON.parse(decoded);
@@ -49,7 +49,7 @@ const logTracking = async (issuesCollection, trackingCollection, issueId, status
     };
     await trackingCollection.insertOne(log);
 
-    // Update issue's current status and last updated info
+    
     const updateDoc = {
         $set: {
             status: status,
@@ -60,7 +60,6 @@ const logTracking = async (issuesCollection, trackingCollection, issueId, status
 };
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
     const db = client.db("issue_report_db");
@@ -69,6 +68,16 @@ async function run() {
     const trackingCollection = db.collection('trackings');
     const paymentCollection = db.collection('payments');
     const upvoteCollection = db.collection('upvotes');
+
+    const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded_email;
+            const query = { email };
+            const user = await userCollection.findOne(query);
+            if (!user || user.role !== 'admin') {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            next();
+        }
 
     app.get('/users/:email/role', async (req, res) => {
             const email = req.params.email;
