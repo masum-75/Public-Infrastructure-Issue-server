@@ -356,6 +356,14 @@ async function run() {
             const users = await userCollection.find({ role: { $ne: 'admin' } }).sort({ createdAt: -1 }).toArray();
             res.send(users);
         });
+        app.patch('/users/:id/block', verifyFBToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const { isBlocked } = req.body;
+            const query = { _id: new ObjectId(id) };
+            const updatedDoc = { $set: { isBlocked } };
+            const result = await userCollection.updateOne(query, updatedDoc);
+            res.send(result);
+        });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
