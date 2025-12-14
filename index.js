@@ -38,6 +38,26 @@ const verifyFBToken = async (req, res, next) => {
         return res.status(401).send({ message: 'unauthorized access' });
     }
 }
+const logTracking = async (issuesCollection, trackingCollection, issueId, status, message, updatedBy, staffName = null) => {
+    const log = {
+        issueId: new ObjectId(issueId),
+        status,
+        message,
+        updatedBy, // Admin, Staff, Citizen
+        staffName,
+        createdAt: new Date()
+    };
+    await trackingCollection.insertOne(log);
+
+    // Update issue's current status and last updated info
+    const updateDoc = {
+        $set: {
+            status: status,
+            lastUpdatedAt: new Date(),
+        }
+    };
+    await issuesCollection.updateOne({ _id: new ObjectId(issueId) }, updateDoc);
+};
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
