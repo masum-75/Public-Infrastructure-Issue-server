@@ -338,6 +338,20 @@ async function run() {
 
             res.send(result);
         });
+
+        app.get('/dashboard/admin-stats',  async (req, res) => {
+            
+            const stats = {
+                totalIssues: await issuesCollection.countDocuments(),
+                resolvedIssues: await issuesCollection.countDocuments({ status: 'Resolved' }),
+                pendingIssues: await issuesCollection.countDocuments({ status: 'Pending' }),
+                rejectedIssues: await issuesCollection.countDocuments({ status: 'Rejected' }),
+                totalPayments: await paymentCollection.aggregate([
+                    { $group: { _id: null, total: { $sum: '$amount' } } }
+                ]).toArray()
+            };
+            res.send(stats);
+        });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
