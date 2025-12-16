@@ -415,6 +415,12 @@ async function run() {
 
             res.send(result);
         });
+        
+        app.get('/dashboard/admin/payments', verifyFBToken, verifyAdmin, async (req, res) => {
+            
+            const payments = await paymentCollection.find({}).sort({ paidAt: -1 }).toArray(); 
+            res.send(payments);
+        });
         app.get('/invoices/:transactionId/pdf', verifyFBToken, async (req, res) => {
             const transactionId = req.params.transactionId;
             const userEmail = req.decoded_email;
