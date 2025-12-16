@@ -4,17 +4,25 @@ const app = express();
 require("dotenv").config();
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
+const PDFDocument = require('pdfkit');
 const admin = require("firebase-admin");
 const port = process.env.PORT || 5000;
 
-const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8');
-const serviceAccount = JSON.parse(decoded);
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+
+
+const serviceAccount = require("./public-issue-firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
 // middleWare
 
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: process.env.CLIENT_DOMAIN, 
+    credentials: true
+}));
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.1rpvn4e.mongodb.net/?appName=Cluster0`;
 const client = new MongoClient(uri, {
@@ -25,6 +33,7 @@ const client = new MongoClient(uri, {
   },
 });
 const verifyFBToken = async (req, res, next) => {
+    console.log("token",req.headers.authorization)
     const token = req.headers.authorization;
     if (!token) {
         return res.status(401).send({ message: 'unauthorized access' });
@@ -43,7 +52,7 @@ const logTracking = async (issuesCollection, trackingCollection, issueId, status
         issueId: new ObjectId(issueId),
         status,
         message,
-        updatedBy, // Admin, Staff, Citizen
+        updatedBy, 
         staffName,
         createdAt: new Date()
     };
@@ -405,6 +414,84 @@ async function run() {
             }
 
             res.send(result);
+        });
+        app.get('/invoices/:transactionId/pdf', verifyFBToken, async (req, res) => {
+            const transactionId = req.params.transactionId;
+            const userEmail = req.decoded_email;
+            
+            const payment = await paymentCollection.findOne({ transactionId });
+            
+            if (!payment) {
+                return res.status(404).send({ message: 'Payment record not found' });
+            }
+            
+            
+            const user = await userCollection.findOne({ email: userEmail });
+            if (user.role !== 'admin' && payment.customerEmail !== userEmail) {
+                return res.status(403).send({ message: 'Forbidden access to this invoice' });
+            }
+            
+           
+            const doc = new PDFDocument({ size: 'A4', margin: 50 });
+            
+           
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename=Invoice-${transactionId}.pdf`);
+
+            doc.pipe(res); 
+
+           
+            doc.fontSize(25).fillColor('#4a4a4a').text('Tax Invoice', { align: 'center' }).moveDown();
+            
+           
+            doc.fontSize(10).text(`Date: ${new Date(payment.paidAt).toLocaleDateString()}`, { align: 'right' });
+            doc.text(`Transaction ID: ${transactionId}`, { align: 'right' }).moveDown();
+            
+            
+            doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke('#cccccc').moveDown();
+
+         
+            doc.fontSize(12).text('Billed To:', 50, doc.y);
+            doc.text('Service Provider:', 350, doc.y).moveDown();
+            
+            doc.fontSize(10);
+            doc.text(`${payment.customerEmail}`, 50, doc.y);
+            doc.text('Public Infrastructure System', 350, doc.y).moveDown();
+            
+            doc.moveDown(2);
+
+          
+            const tableTop = doc.y;
+            doc.fontSize(12).fillColor('#000000');
+            doc.text('Description', 50, tableTop);
+            doc.text('Amount', 450, tableTop, { width: 100, align: 'right' });
+            
+            doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke('#000000');
+
+          
+            const description = payment.type === 'boost' 
+                ? `Issue Priority Boost for: ${payment.metadata.issueId}` 
+                : `Premium Citizen Subscription`;
+            
+            doc.fontSize(10).moveDown(0.5);
+            doc.text(description, 50, doc.y);
+            doc.text(`${payment.amount} ${payment.currency.toUpperCase()}`, 450, doc.y, { width: 100, align: 'right' });
+            
+            doc.moveDown(2);
+
+            
+            doc.moveTo(400, doc.y).lineTo(550, doc.y).stroke('#000000');
+            doc.moveDown(0.5);
+
+            doc.fontSize(14).text('TOTAL:', 350, doc.y, { align: 'left' });
+            doc.text(`${payment.amount} ${payment.currency.toUpperCase()}`, 450, doc.y, { width: 100, align: 'right' });
+
+            doc.moveDown(3);
+            
+            
+            doc.fontSize(10).text('Thank you for contributing to public infrastructure improvement.', 50, doc.y, { align: 'center', width: 500 });
+
+            doc.end();
         });
 
         app.get('/dashboard/admin-stats',  async (req, res) => {
