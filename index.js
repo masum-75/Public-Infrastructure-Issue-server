@@ -800,6 +800,33 @@ app.patch('/dashboard/admin/issues/:id/reject', verifyFBToken, verifyAdmin, asyn
       };
       res.send(stats);
     });
+    app.delete('/dashboard/admin/staff/:email', verifyFBToken, verifyAdmin, async (req, res) => {
+            const staffEmail = req.params.email;
+            
+            if (staffEmail === req.decoded_email) {
+                 return res.status(403).send({ message: 'Cannot delete your own account.' });
+            }
+
+            try {
+                const userRecord = await admin.auth().getUserByEmail(staffEmail);
+                await admin.auth().deleteUser(userRecord.uid);
+
+                const result = await userCollection.deleteOne({ email: staffEmail, role: 'staff' });
+                
+                if (result.deletedCount === 0) {
+                     return res.status(404).send({ message: 'Staff user not found in database.' });
+                }
+
+                res.send({ deletedCount: result.deletedCount, message: 'Staff deleted successfully from Firebase and MongoDB.' });
+            } catch (error) {
+                if (error.code === 'auth/user-not-found') {
+                    
+                    await userCollection.deleteOne({ email: staffEmail, role: 'staff' });
+                    return res.status(200).send({ message: 'User not found in Firebase, deleted from MongoDB.' });
+                }
+                res.status(500).send({ message: 'Failed to delete staff account.', error: error.message });
+            }
+        });
     app.get('/users/staff', verifyFBToken, verifyAdmin, async (req, res) => {
     const staffList = await userCollection.find({ role: 'staff' }).sort({ createdAt: -1 }).toArray();
     res.send(staffList);
