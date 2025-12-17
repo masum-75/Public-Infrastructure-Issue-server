@@ -575,11 +575,7 @@ async function run() {
       }
     );
 
-    app.get(
-      "/dashboard/admin/payments",
-      verifyFBToken,
-      verifyAdmin,
-      async (req, res) => {
+    app.get("/dashboard/admin/payments",verifyFBToken, verifyAdmin,async (req, res) => {
         const payments = await paymentCollection
           .find({})
           .sort({ paidAt: -1 })
@@ -587,6 +583,101 @@ async function run() {
         res.send(payments);
       }
     );
+    app.post('/dashboard/admin/staff', verifyFBToken, verifyAdmin, async (req, res) => {
+    const { email, password, displayName, phone, photoURL } = req.body;
+    
+   
+    try {
+        const userRecord = await admin.auth().createUser({
+            email,
+            password,
+            displayName,
+            photoURL: photoURL || 'https://via.placeholder.com/150', 
+        });
+        
+        
+        const staffUser = {
+            email,
+            displayName,
+            photoURL: photoURL || 'https://via.placeholder.com/150',
+            phone,
+            role: 'staff',
+            isPremium: false,
+            isBlocked: false,
+            createdAt: new Date()
+        };
+        const result = await userCollection.insertOne(staffUser);
+        
+        res.send({ insertedId: result.insertedId, firebaseUid: userRecord.uid });
+    } catch (error) {
+       
+        if (error.code === 'auth/email-already-exists') {
+             return res.status(409).send({ message: 'Email already exists in Firebase Auth.' });
+        }
+        res.status(500).send({ message: 'Failed to create staff account.', error: error.message });
+    }
+});
+app.patch('/dashboard/admin/issues/:id/assign', verifyFBToken, verifyAdmin, async (req, res) => {
+    const issueId = req.params.id;
+    const { assignedStaffEmail, assignedStaffName } = req.body;
+    const adminEmail = req.decoded_email;
+    
+   
+    const adminUser = await userCollection.findOne({ email: adminEmail });
+
+   
+    const issue = await issuesCollection.findOne({ _id: new ObjectId(issueId) });
+    if (issue.assignedStaffEmail) {
+        return res.status(409).send({ message: 'Issue already assigned.' });
+    }
+
+    const updatedDoc = {
+        $set: {
+            assignedStaffEmail,
+            assignedStaffName,
+            lastUpdatedAt: new Date()
+        }
+    };
+    const result = await issuesCollection.updateOne({ _id: new ObjectId(issueId) }, updatedDoc);
+
+    
+    if (result.modifiedCount > 0) {
+        const message = `Issue assigned to Staff: ${assignedStaffName}`;
+        await logTracking(issuesCollection, trackingCollection, issueId, issue.status, message, 'Admin', adminUser.displayName); // Status remains as it was (e.g., Pending)
+    }
+
+    res.send(result);
+});
+
+
+app.patch('/dashboard/admin/issues/:id/reject', verifyFBToken, verifyAdmin, async (req, res) => {
+    const issueId = req.params.id;
+    const adminEmail = req.decoded_email;
+
+    
+    const adminUser = await userCollection.findOne({ email: adminEmail });
+
+   
+    const issue = await issuesCollection.findOne({ _id: new ObjectId(issueId) });
+    if (issue.status !== 'Pending') {
+        return res.status(403).send({ message: 'Only Pending issues can be rejected.' });
+    }
+
+    const updatedDoc = {
+        $set: {
+            status: 'Rejected',
+            lastUpdatedAt: new Date()
+        }
+    };
+    const result = await issuesCollection.updateOne({ _id: new ObjectId(issueId) }, updatedDoc);
+
+    
+    if (result.modifiedCount > 0) {
+        await logTracking(issuesCollection, trackingCollection, issueId, 'Rejected', 'Issue was reviewed and rejected by admin.', 'Admin', adminUser.displayName);
+    }
+
+    res.send(result);
+});
     app.get("/invoices/:transactionId/pdf", verifyFBToken, async (req, res) => {
       const transactionId = req.params.transactionId;
       const userEmail = req.decoded_email;
@@ -709,6 +800,10 @@ async function run() {
       };
       res.send(stats);
     });
+    app.get('/users/staff', verifyFBToken, verifyAdmin, async (req, res) => {
+    const staffList = await userCollection.find({ role: 'staff' }).sort({ createdAt: -1 }).toArray();
+    res.send(staffList);
+});
     app.get("/users/all", verifyFBToken, verifyAdmin, async (req, res) => {
       const users = await userCollection
         .find({ role: { $ne: "admin" } })
@@ -716,6 +811,76 @@ async function run() {
         .toArray();
       res.send(users);
     });
+    app.get('/dashboard/staff/assigned-issues', verifyFBToken, verifyStaff, async (req, res) => {
+    const staffEmail = req.decoded_email;
+    const { status, priority } = req.query;
+
+    const query = { assignedStaffEmail: staffEmail };
+    if (status) { query.status = status; }
+    if (priority) { query.priority = priority; }
+    
+    
+    const sortOptions = { priority: -1, lastUpdatedAt: -1 };
+
+    const issues = await issuesCollection.find(query).sort(sortOptions).toArray();
+    res.send(issues);
+});
+
+app.get('/dashboard/staff/stats', verifyFBToken, verifyStaff, async (req, res) => {
+    try {
+        const staffEmail = req.decoded_email;
+        
+        const totalAssigned = await issuesCollection.countDocuments({ assignedStaffEmail: staffEmail });
+        const resolvedCount = await issuesCollection.countDocuments({ assignedStaffEmail: staffEmail, status: 'Resolved' });
+        const inProgressCount = await issuesCollection.countDocuments({ assignedStaffEmail: staffEmail, status: { $in: ['In-Progress', 'Working'] } });
+        
+        const dailyResolved = await issuesCollection.aggregate([
+            { $match: { assignedStaffEmail: staffEmail, status: "Resolved" } },
+            { 
+                $project: {
+                    resolutionDay: { $dateToString: { format: "%Y-%m-%d", date: "$lastUpdatedAt" } }
+                } 
+            },
+            { $group: { _id: "$resolutionDay", resolvedCount: { $sum: 1 } } },
+            { $sort: { _id: -1 } },
+            { $limit: 7 } 
+        ]).toArray();
+        
+        res.send({
+            totalAssigned,
+            resolvedCount,
+            inProgressCount,
+            dailyResolved
+        });
+    } catch (error) {
+        res.status(500).send({ message: 'Error fetching staff stats', error: error.message });
+    }
+});
+app.patch('/dashboard/staff/issues/:id/status', verifyFBToken, verifyStaff, async (req, res) => {
+    const issueId = req.params.id;
+    const { newStatus, note = 'Status updated by staff.' } = req.body;
+    const staffEmail = req.decoded_email;
+
+    
+    const staffUser = await userCollection.findOne({ email: staffEmail });
+    
+   
+    const updateDoc = {
+        $set: { 
+            status: newStatus,
+            lastUpdatedAt: new Date()
+        }
+    };
+    const result = await issuesCollection.updateOne({ _id: new ObjectId(issueId), assignedStaffEmail: staffEmail }, updateDoc);
+
+    
+    if (result.modifiedCount > 0) {
+        const message = newStatus === 'Resolved' ? 'Issue marked as resolved.' : note;
+        await logTracking(issuesCollection, trackingCollection, issueId, newStatus, message, 'Staff', staffUser.displayName);
+    }
+
+    res.send(result);
+});
     app.patch(
       "/users/:id/block",
       verifyFBToken,
