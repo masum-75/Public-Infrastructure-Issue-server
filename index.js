@@ -305,6 +305,18 @@ async function run() {
       );
     });
 
+    app.get("/dashboard/admin/payments", verifyFBToken, verifyAdmin, async (req, res) => {
+    try {
+        const result = await paymentCollection
+            .find()
+            .sort({ paidAt: -1 }) 
+            .toArray();
+        res.send(result);
+    } catch (error) {
+        res.status(500).send({ message: "Failed to fetch payments", error: error.message });
+    }
+});
+
     app.post("/boost-checkout-session", verifyFBToken, async (req, res) => {
       const { issueId, title, cost } = req.body;
       const session = await stripe.checkout.sessions.create({
