@@ -101,15 +101,15 @@ async function run() {
       next();
     };
 
-    app.get("/users/:email/role", async (req, res) => {
-      const email = req.params.email;
-      const user = await userCollection.findOne({ email });
-      res.send({
+  app.get("/users/:email/role", async (req, res) => {
+    const email = req.params.email;
+    const user = await userCollection.findOne({ email });
+    res.send({
         role: user?.role || "citizen",
         isPremium: user?.isPremium || false,
         isBlocked: user?.isBlocked || false,
-      });
     });
+});
 
     app.post("/users", async (req, res) => {
       try {
@@ -672,5 +672,9 @@ async function run() {
 }
 run().catch(console.dir);
 
-app.get("/", (req, res) => res.send("Public Infrastructure Issue Reporting APIs running"));
-app.listen(port, () => console.log(`Server on ${port}`));
+app.get('/', (req, res) => {
+    res.send('CityCare Server is running...');
+});
+
+
+module.exports = app;
