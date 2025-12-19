@@ -112,37 +112,38 @@ async function run() {
       });
     });
 
-    app.post("/users", async (req, res) => {
-      try {
+   app.post("/users", async (req, res) => {
+    try {
         const user = req.body;
-
-        const query = { email: user.email.toLowerCase() };
+        
+        const userEmail = user.email.toLowerCase();
+        const query = { email: userEmail };
+        
         const userExists = await userCollection.findOne(query);
 
         if (userExists) {
-          return res.status(409).send({
-            success: false,
-            message: "User already registered with this email.",
-          });
+            return res.status(409).send({
+                success: false,
+                message: "User already registered.",
+            });
         }
+
         const newUser = {
-          ...user,
-          email: user.email.toLowerCase(),
-          role: "citizen",
-          isPremium: false,
-          isBlocked: false,
-          issueCount: 0,
-          createdAt: new Date(),
+            ...user,
+            email: userEmail,
+            role: "citizen",
+            isPremium: false,
+            isBlocked: false,
+            issueCount: 0,
+            createdAt: new Date(),
         };
 
         const result = await userCollection.insertOne(newUser);
         res.status(201).send(result);
-      } catch (error) {
-        res
-          .status(500)
-          .send({ message: "Internal Server Error", error: error.message });
-      }
-    });
+    } catch (error) {
+        res.status(500).send({ message: "Server Error", error: error.message });
+    }
+});
 
     app.get("/users/all", verifyFBToken, verifyAdmin, async (req, res) => {
       res.send(
