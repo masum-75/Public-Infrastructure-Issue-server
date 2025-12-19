@@ -121,7 +121,7 @@ async function run() {
             isBlocked: user?.isBlocked || false,
         });
     } catch (error) {
-        res.status(500).send({ message: "Role fetch error" });
+        res.status(500).send({ message: "Role error" });
     }
 });
 
