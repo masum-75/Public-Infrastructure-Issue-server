@@ -102,15 +102,28 @@ async function run() {
       next();
     };
 
-    app.get("/users/:email/role", async (req, res) => {
-      const email = req.params.email;
-      const user = await userCollection.findOne({ email });
-      res.send({
-        role: user?.role || "citizen",
-        isPremium: user?.isPremium || false,
-        isBlocked: user?.isBlocked || false,
-      });
-    });
+   app.get("/users/:email/role", async (req, res) => {
+    try {
+        const email = req.params.email;
+        const user = await userCollection.findOne({ email: email.toLowerCase() });
+        
+        if (!user) {
+            return res.send({
+                role: "citizen",
+                isPremium: false,
+                isBlocked: false,
+            });
+        }
+
+        res.send({
+            role: user?.role || "citizen",
+            isPremium: user?.isPremium || false,
+            isBlocked: user?.isBlocked || false,
+        });
+    } catch (error) {
+        res.status(500).send({ message: "Role fetch error" });
+    }
+});
 
    app.post("/users", async (req, res) => {
     try {
