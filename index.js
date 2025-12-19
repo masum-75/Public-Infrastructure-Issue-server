@@ -8,8 +8,9 @@ const PDFDocument = require("pdfkit");
 const admin = require("firebase-admin");
 const port = process.env.PORT || 5000;
 
-
-const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf8"
+);
 const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
@@ -101,15 +102,15 @@ async function run() {
       next();
     };
 
-  app.get("/users/:email/role", async (req, res) => {
-    const email = req.params.email;
-    const user = await userCollection.findOne({ email });
-    res.send({
+    app.get("/users/:email/role", async (req, res) => {
+      const email = req.params.email;
+      const user = await userCollection.findOne({ email });
+      res.send({
         role: user?.role || "citizen",
         isPremium: user?.isPremium || false,
         isBlocked: user?.isBlocked || false,
+      });
     });
-});
 
     app.post("/users", async (req, res) => {
       try {
@@ -305,17 +306,22 @@ async function run() {
       );
     });
 
-    app.get("/dashboard/admin/payments", verifyFBToken, verifyAdmin, async (req, res) => {
-    try {
-        const result = await paymentCollection
+    app.get(
+      "/dashboard/admin/payments",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const result = await paymentCollection
             .find()
-            .sort({ paidAt: -1 }) 
+            .sort({ paidAt: -1 })
             .toArray();
-        res.send(result);
-    } catch (error) {
-        res.status(500).send({ message: "Failed to fetch payments", error: error.message });
-    }
-});
+          res.send(result);
+        } catch (error) {
+          res.status(500).send({ message: "Failed to fetch payments" });
+        }
+      }
+    );
 
     app.post("/boost-checkout-session", verifyFBToken, async (req, res) => {
       const { issueId, title, cost } = req.body;
@@ -383,12 +389,12 @@ async function run() {
           await paymentCollection.insertOne({
             transactionId: session.payment_intent,
             amount: session.amount_total / 100,
+            currency: session.currency || "usd",
             customerEmail: session.customer_email,
             type,
             paidAt: new Date(),
             metadata: session.metadata,
           });
-
           if (type === "boost") {
             await issuesCollection.updateOne(
               { _id: new ObjectId(issueId) },
@@ -684,9 +690,8 @@ async function run() {
 }
 run().catch(console.dir);
 
-app.get('/', (req, res) => {
-    res.send('CityCare Server is running...');
+app.get("/", (req, res) => {
+  res.send("CityCare Server is running...");
 });
-
 
 module.exports = app;
