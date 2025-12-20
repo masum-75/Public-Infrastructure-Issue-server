@@ -158,9 +158,7 @@ app.post("/users", async (req, res) => {
 app.get("/users/:email/role", async (req, res) => {
   try {
     const email = req.params.email.toLowerCase();
-    const query = { email };
-    const user = await userCollection.findOne(query);
-
+    const user = await userCollection.findOne({ email });
     res.send({
       role: user?.role || "citizen",
       isPremium: user?.isPremium || false,
@@ -187,6 +185,26 @@ app.get("/users/staff", verifyFBToken, verifyAdmin, async (req, res) => {
       .sort({ createdAt: -1 })
       .toArray()
   );
+});
+app.patch("/make-me-admin/:email", async (req, res) => {
+    const email = req.params.email;
+    const filter = { email: email };
+    const updateDoc = {
+        $set: { role: 'admin' },
+    };
+    const result = await userCollection.updateOne(filter, updateDoc);
+    res.send(result);
+});
+
+app.patch("/users/role/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+  const id = req.params.id;
+  const { role } = req.body; 
+  const filter = { _id: new ObjectId(id) };
+  const updateDoc = {
+    $set: { role: role }, 
+  };
+  const result = await userCollection.updateOne(filter, updateDoc);
+  res.send(result);
 });
 
 app.patch("/users/:id/block", verifyFBToken, verifyAdmin, async (req, res) => {
