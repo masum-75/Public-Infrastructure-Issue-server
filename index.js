@@ -9,11 +9,10 @@ const admin = require("firebase-admin");
 
 // Firebase Admin Setup
 
-
 const serviceAccount = require("./public-issue-firebase-adminsdk.json");
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount),
 });
 
 if (!admin.apps.length) {
@@ -51,7 +50,6 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    
     const db = client.db("issue_report_db");
     userCollection = db.collection("users");
     issuesCollection = db.collection("issues");
@@ -124,8 +122,6 @@ const logTracking = async (
   );
 };
 
-
-
 app.get("/", (req, res) => {
   res.send("CityCare Server is running...");
 });
@@ -159,9 +155,10 @@ app.post("/users", async (req, res) => {
 
 app.get("/users/:email/role", async (req, res) => {
   try {
-    const user = await userCollection.findOne({
-      email: req.params.email.toLowerCase(),
-    });
+    const email = req.params.email.toLowerCase();
+    const query = { email };
+    const user = await userCollection.findOne(query);
+
     res.send({
       role: user?.role || "citizen",
       isPremium: user?.isPremium || false,
@@ -293,31 +290,31 @@ app.patch("/issues/:id/upvote", verifyFBToken, async (req, res) => {
   );
 });
 
- app.get("/trackings/:issueId/logs", async (req, res) => {
-      res.send(
-        await trackingCollection
-          .find({ issueId: new ObjectId(req.params.issueId) })
-          .sort({ createdAt: -1 })
-          .toArray()
-      );
-    });
+app.get("/trackings/:issueId/logs", async (req, res) => {
+  res.send(
+    await trackingCollection
+      .find({ issueId: new ObjectId(req.params.issueId) })
+      .sort({ createdAt: -1 })
+      .toArray()
+  );
+});
 
-    app.get(
-      "/dashboard/admin/payments",
-      verifyFBToken,
-      verifyAdmin,
-      async (req, res) => {
-        try {
-          const result = await paymentCollection
-            .find()
-            .sort({ paidAt: -1 })
-            .toArray();
-          res.send(result);
-        } catch (error) {
-          res.status(500).send({ message: "Failed to fetch payments" });
-        }
-      }
-    );
+app.get(
+  "/dashboard/admin/payments",
+  verifyFBToken,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const result = await paymentCollection
+        .find()
+        .sort({ paidAt: -1 })
+        .toArray();
+      res.send(result);
+    } catch (error) {
+      res.status(500).send({ message: "Failed to fetch payments" });
+    }
+  }
+);
 
 // Payments & Stripe
 app.post("/boost-checkout-session", verifyFBToken, async (req, res) => {
@@ -398,56 +395,56 @@ app.patch("/payment-success", async (req, res) => {
 });
 
 // Admin Stats
- app.get("/dashboard/my-issues", verifyFBToken, async (req, res) => {
-      const query = { citizenEmail: req.decoded_email };
-      if (req.query.status) query.status = req.query.status;
-      res.send(
-        await issuesCollection.find(query).sort({ createdAt: -1 }).toArray()
-      );
-    });
+app.get("/dashboard/my-issues", verifyFBToken, async (req, res) => {
+  const query = { citizenEmail: req.decoded_email };
+  if (req.query.status) query.status = req.query.status;
+  res.send(
+    await issuesCollection.find(query).sort({ createdAt: -1 }).toArray()
+  );
+});
 
-    app.patch("/dashboard/my-issues/:id", verifyFBToken, async (req, res) => {
-      const filter = {
-        _id: new ObjectId(req.params.id),
-        citizenEmail: req.decoded_email,
-        status: "Pending",
-      };
-      const issue = await issuesCollection.findOne(filter);
-      if (!issue) return res.status(403).send({ message: "Cannot edit" });
-      const result = await issuesCollection.updateOne(filter, {
-        $set: { ...req.body, lastUpdatedAt: new Date() },
-      });
-      if (result.modifiedCount > 0)
-        await logTracking(
-          issuesCollection,
-          trackingCollection,
-          req.params.id,
-          "Pending",
-          "Updated by citizen",
-          "Citizen",
-          issue.citizenName
-        );
-      res.send(result);
-    });
+app.patch("/dashboard/my-issues/:id", verifyFBToken, async (req, res) => {
+  const filter = {
+    _id: new ObjectId(req.params.id),
+    citizenEmail: req.decoded_email,
+    status: "Pending",
+  };
+  const issue = await issuesCollection.findOne(filter);
+  if (!issue) return res.status(403).send({ message: "Cannot edit" });
+  const result = await issuesCollection.updateOne(filter, {
+    $set: { ...req.body, lastUpdatedAt: new Date() },
+  });
+  if (result.modifiedCount > 0)
+    await logTracking(
+      issuesCollection,
+      trackingCollection,
+      req.params.id,
+      "Pending",
+      "Updated by citizen",
+      "Citizen",
+      issue.citizenName
+    );
+  res.send(result);
+});
 
-    app.delete("/dashboard/my-issues/:id", verifyFBToken, async (req, res) => {
-      const filter = {
-        _id: new ObjectId(req.params.id),
-        citizenEmail: req.decoded_email,
-        status: "Pending",
-      };
-      const result = await issuesCollection.deleteOne(filter);
-      if (result.deletedCount > 0) {
-        await trackingCollection.deleteMany({
-          issueId: new ObjectId(req.params.id),
-        });
-        await userCollection.updateOne(
-          { email: req.decoded_email },
-          { $inc: { issueCount: -1 } }
-        );
-      }
-      res.send(result);
+app.delete("/dashboard/my-issues/:id", verifyFBToken, async (req, res) => {
+  const filter = {
+    _id: new ObjectId(req.params.id),
+    citizenEmail: req.decoded_email,
+    status: "Pending",
+  };
+  const result = await issuesCollection.deleteOne(filter);
+  if (result.deletedCount > 0) {
+    await trackingCollection.deleteMany({
+      issueId: new ObjectId(req.params.id),
     });
+    await userCollection.updateOne(
+      { email: req.decoded_email },
+      { $inc: { issueCount: -1 } }
+    );
+  }
+  res.send(result);
+});
 app.get(
   "/dashboard/admin/stats",
   verifyFBToken,
@@ -463,172 +460,172 @@ app.get(
     res.send({ totalIssues, resolved, totalRevenue: rev[0]?.total || 0 });
   }
 );
-app.delete("/dashboard/admin/staff/:email",verifyFBToken, verifyAdmin,async (req, res) => {
-        const staffEmail = req.params.email;
-        const userRecord = await admin.auth().getUserByEmail(staffEmail);
-        await admin.auth().deleteUser(userRecord.uid);
-        res.send(
-          await userCollection.deleteOne({ email: staffEmail, role: "staff" })
-        );
-      }
+app.delete(
+  "/dashboard/admin/staff/:email",
+  verifyFBToken,
+  verifyAdmin,
+  async (req, res) => {
+    const staffEmail = req.params.email;
+    const userRecord = await admin.auth().getUserByEmail(staffEmail);
+    await admin.auth().deleteUser(userRecord.uid);
+    res.send(
+      await userCollection.deleteOne({ email: staffEmail, role: "staff" })
     );
+  }
+);
 // Staff Assignment
 app.patch(
-      "/dashboard/admin/issues/:id/assign",
-      verifyFBToken,
-      verifyAdmin,
-      async (req, res) => {
-        const { assignedStaffEmail, assignedStaffName } = req.body;
-        const adminUser = await userCollection.findOne({
-          email: req.decoded_email,
-        });
-        const result = await issuesCollection.updateOne(
-          { _id: new ObjectId(req.params.id) },
-          {
-            $set: {
-              assignedStaffEmail,
-              assignedStaffName,
-              lastUpdatedAt: new Date(),
-            },
-          }
-        );
-        if (result.modifiedCount > 0)
-          await logTracking(
-            issuesCollection,
-            trackingCollection,
-            req.params.id,
-            "Pending",
-            `Assigned to ${assignedStaffName}`,
-            "Admin",
-            adminUser.displayName
-          );
-        res.send(result);
-      }
-    );
-
-    app.patch(
-      "/dashboard/admin/issues/:id/reject",
-      verifyFBToken,
-      verifyAdmin,
-      async (req, res) => {
-        const adminUser = await userCollection.findOne({
-          email: req.decoded_email,
-        });
-        const result = await issuesCollection.updateOne(
-          { _id: new ObjectId(req.params.id), status: "Pending" },
-          { $set: { status: "Rejected", lastUpdatedAt: new Date() } }
-        );
-        if (result.modifiedCount > 0)
-          await logTracking(
-            issuesCollection,
-            trackingCollection,
-            req.params.id,
-            "Rejected",
-            "Rejected by admin",
-            "Admin",
-            adminUser.displayName
-          );
-        res.send(result);
-      }
-    );
-
-    app.get(
-      "/dashboard/staff/assigned-issues",
-      verifyFBToken,
-      verifyStaff,
-      async (req, res) => {
-        res.send(
-          await issuesCollection
-            .find({ assignedStaffEmail: req.decoded_email })
-            .sort({ priority: -1 })
-            .toArray()
-        );
-      }
-    );
-
-    app.get(
-      "/dashboard/staff/stats",
-      verifyFBToken,
-      verifyStaff,
-      async (req, res) => {
-        const email = req.decoded_email;
-        const totalAssigned = await issuesCollection.countDocuments({
-          assignedStaffEmail: email,
-        });
-        const resolvedCount = await issuesCollection.countDocuments({
-          assignedStaffEmail: email,
-          status: "Resolved",
-        });
-        res.send({ totalAssigned, resolvedCount });
-      }
-    );
-
-    app.patch(
-      "/dashboard/staff/issues/:id/status",
-      verifyFBToken,
-      verifyStaff,
-      async (req, res) => {
-        const { newStatus, note } = req.body;
-        const staff = await userCollection.findOne({
-          email: req.decoded_email,
-        });
-        const result = await issuesCollection.updateOne(
-          {
-            _id: new ObjectId(req.params.id),
-            assignedStaffEmail: req.decoded_email,
-          },
-          { $set: { status: newStatus, lastUpdatedAt: new Date() } }
-        );
-        if (result.modifiedCount > 0)
-          await logTracking(
-            issuesCollection,
-            trackingCollection,
-            req.params.id,
-            newStatus,
-            note,
-            "Staff",
-            staff.displayName
-          );
-        res.send(result);
-      }
-    );
-    app.get(
-      "/dashboard/citizen-stats/:email",
-      verifyFBToken,
-      async (req, res) => {
-        const email = req.params.email;
-        const totalIssues = await issuesCollection.countDocuments({
-          citizenEmail: email,
-        });
-        const resolvedIssues = await issuesCollection.countDocuments({
-          citizenEmail: email,
-          status: "Resolved",
-        });
-        const pendingIssues = await issuesCollection.countDocuments({
-          citizenEmail: email,
-          status: "Pending",
-        });
-
-        res.send({ totalIssues, resolvedIssues, pendingIssues });
-      }
-    );
-
-    app.get("/invoices/:transactionId/pdf",  async (req, res) => {
-      const payment = await paymentCollection.findOne({
-        transactionId: req.params.transactionId,
-      });
-      if (!payment) return res.status(404).send("Not found");
-      const doc = new PDFDocument();
-      res.setHeader("Content-Type", "application/pdf");
-      doc.pipe(res);
-      doc.fontSize(20).text("Invoice", { align: "center" }).moveDown();
-      doc
-        .fontSize(12)
-        .text(`Transaction: ${payment.transactionId}`)
-        .text(`Amount: ${payment.amount} USD`)
-        .text(`Date: ${new Date(payment.paidAt).toLocaleDateString()}`);
-      doc.end();
+  "/dashboard/admin/issues/:id/assign",
+  verifyFBToken,
+  verifyAdmin,
+  async (req, res) => {
+    const { assignedStaffEmail, assignedStaffName } = req.body;
+    const adminUser = await userCollection.findOne({
+      email: req.decoded_email,
     });
+    const result = await issuesCollection.updateOne(
+      { _id: new ObjectId(req.params.id) },
+      {
+        $set: {
+          assignedStaffEmail,
+          assignedStaffName,
+          lastUpdatedAt: new Date(),
+        },
+      }
+    );
+    if (result.modifiedCount > 0)
+      await logTracking(
+        issuesCollection,
+        trackingCollection,
+        req.params.id,
+        "Pending",
+        `Assigned to ${assignedStaffName}`,
+        "Admin",
+        adminUser.displayName
+      );
+    res.send(result);
+  }
+);
+
+app.patch(
+  "/dashboard/admin/issues/:id/reject",
+  verifyFBToken,
+  verifyAdmin,
+  async (req, res) => {
+    const adminUser = await userCollection.findOne({
+      email: req.decoded_email,
+    });
+    const result = await issuesCollection.updateOne(
+      { _id: new ObjectId(req.params.id), status: "Pending" },
+      { $set: { status: "Rejected", lastUpdatedAt: new Date() } }
+    );
+    if (result.modifiedCount > 0)
+      await logTracking(
+        issuesCollection,
+        trackingCollection,
+        req.params.id,
+        "Rejected",
+        "Rejected by admin",
+        "Admin",
+        adminUser.displayName
+      );
+    res.send(result);
+  }
+);
+
+app.get(
+  "/dashboard/staff/assigned-issues",
+  verifyFBToken,
+  verifyStaff,
+  async (req, res) => {
+    res.send(
+      await issuesCollection
+        .find({ assignedStaffEmail: req.decoded_email })
+        .sort({ priority: -1 })
+        .toArray()
+    );
+  }
+);
+
+app.get(
+  "/dashboard/staff/stats",
+  verifyFBToken,
+  verifyStaff,
+  async (req, res) => {
+    const email = req.decoded_email;
+    const totalAssigned = await issuesCollection.countDocuments({
+      assignedStaffEmail: email,
+    });
+    const resolvedCount = await issuesCollection.countDocuments({
+      assignedStaffEmail: email,
+      status: "Resolved",
+    });
+    res.send({ totalAssigned, resolvedCount });
+  }
+);
+
+app.patch(
+  "/dashboard/staff/issues/:id/status",
+  verifyFBToken,
+  verifyStaff,
+  async (req, res) => {
+    const { newStatus, note } = req.body;
+    const staff = await userCollection.findOne({
+      email: req.decoded_email,
+    });
+    const result = await issuesCollection.updateOne(
+      {
+        _id: new ObjectId(req.params.id),
+        assignedStaffEmail: req.decoded_email,
+      },
+      { $set: { status: newStatus, lastUpdatedAt: new Date() } }
+    );
+    if (result.modifiedCount > 0)
+      await logTracking(
+        issuesCollection,
+        trackingCollection,
+        req.params.id,
+        newStatus,
+        note,
+        "Staff",
+        staff.displayName
+      );
+    res.send(result);
+  }
+);
+app.get("/dashboard/citizen-stats/:email", verifyFBToken, async (req, res) => {
+  const email = req.params.email;
+  const totalIssues = await issuesCollection.countDocuments({
+    citizenEmail: email,
+  });
+  const resolvedIssues = await issuesCollection.countDocuments({
+    citizenEmail: email,
+    status: "Resolved",
+  });
+  const pendingIssues = await issuesCollection.countDocuments({
+    citizenEmail: email,
+    status: "Pending",
+  });
+
+  res.send({ totalIssues, resolvedIssues, pendingIssues });
+});
+
+app.get("/invoices/:transactionId/pdf", async (req, res) => {
+  const payment = await paymentCollection.findOne({
+    transactionId: req.params.transactionId,
+  });
+  if (!payment) return res.status(404).send("Not found");
+  const doc = new PDFDocument();
+  res.setHeader("Content-Type", "application/pdf");
+  doc.pipe(res);
+  doc.fontSize(20).text("Invoice", { align: "center" }).moveDown();
+  doc
+    .fontSize(12)
+    .text(`Transaction: ${payment.transactionId}`)
+    .text(`Amount: ${payment.amount} USD`)
+    .text(`Date: ${new Date(payment.paidAt).toLocaleDateString()}`);
+  doc.end();
+});
 
 // Vercel export
 module.exports = app;
