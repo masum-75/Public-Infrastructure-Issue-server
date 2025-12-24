@@ -9,8 +9,9 @@ const admin = require("firebase-admin");
 
 // Firebase Admin Setup
 
-
-const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf8"
+);
 const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
@@ -34,7 +35,7 @@ let userCollection,
 app.use(express.json());
 app.use(
   cors({
-    origin: ["http://localhost:5173","https://public-issue.web.app"],
+    origin: ["http://localhost:5173", "https://public-issue.web.app"],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   })
@@ -101,29 +102,31 @@ const verifyBlocked = async (req, res, next) => {
 };
 
 const logTracking = async (
-  issuesCollection,
-  trackingCollection,
   issueId,
   status,
   message,
   updatedBy,
   staffName = null
 ) => {
-  const log = {
-    issueId: new ObjectId(issueId),
-    status,
-    message,
-    updatedBy,
-    staffName,
-    createdAt: new Date(),
-  };
-  await trackingCollection.insertOne(log);
-  await issuesCollection.updateOne(
-    { _id: new ObjectId(issueId) },
-    { $set: { status, lastUpdatedAt: new Date() } }
-  );
-};
+  try {
+    const log = {
+      issueId: new ObjectId(issueId),
+      status,
+      message,
+      updatedBy,
+      staffName,
+      createdAt: new Date(),
+    };
 
+    await trackingCollection.insertOne(log);
+    await issuesCollection.updateOne(
+      { _id: new ObjectId(issueId) },
+      { $set: { status, lastUpdatedAt: new Date() } }
+    );
+  } catch (logError) {
+    console.error("Tracking Log Error:", logError);
+  }
+};
 app.get("/", (req, res) => {
   res.send("CityCare Server is running...");
 });
@@ -187,21 +190,21 @@ app.get("/users/staff", verifyFBToken, verifyAdmin, async (req, res) => {
   );
 });
 app.patch("/make-me-admin/:email", async (req, res) => {
-    const email = req.params.email;
-    const filter = { email: email };
-    const updateDoc = {
-        $set: { role: 'admin' },
-    };
-    const result = await userCollection.updateOne(filter, updateDoc);
-    res.send(result);
+  const email = req.params.email;
+  const filter = { email: email };
+  const updateDoc = {
+    $set: { role: "admin" },
+  };
+  const result = await userCollection.updateOne(filter, updateDoc);
+  res.send(result);
 });
 
 app.patch("/users/role/:id", verifyFBToken, verifyAdmin, async (req, res) => {
   const id = req.params.id;
-  const { role } = req.body; 
+  const { role } = req.body;
   const filter = { _id: new ObjectId(id) };
   const updateDoc = {
-    $set: { role: role }, 
+    $set: { role: role },
   };
   const result = await userCollection.updateOne(filter, updateDoc);
   res.send(result);
@@ -220,15 +223,15 @@ app.patch("/users/:id/block", verifyFBToken, verifyAdmin, async (req, res) => {
 app.post("/issues", verifyFBToken, verifyBlocked, async (req, res) => {
   try {
     const issue = req.body;
+    
     const user = await userCollection.findOne({ email: req.decoded_email });
-
-   
     if (!user) {
-        return res.status(404).send({ message: "User not found" });
+      return res.status(404).send({ message: "User not found in database!" });
     }
 
-    if (!user.isPremium && (user.issueCount || 0) >= 3)
-      return res.status(403).send({ message: "Limit reached!" });
+    if (!user.isPremium && (user.issueCount || 0) >= 3) {
+      return res.status(403).send({ message: "Limit reached! Free users can only report 3 issues." });
+    }
 
     issue.status = "Pending";
     issue.priority = "Normal";
@@ -239,13 +242,12 @@ app.post("/issues", verifyFBToken, verifyBlocked, async (req, res) => {
 
     const result = await issuesCollection.insertOne(issue);
 
-   
     await logTracking(
       result.insertedId,
       "Pending",
       "Issue Reported",
       "Citizen",
-      user.displayName || "Unknown"
+      user.displayName || "Anonymous"
     );
 
     if (!user.isPremium) {
@@ -254,10 +256,15 @@ app.post("/issues", verifyFBToken, verifyBlocked, async (req, res) => {
         { $inc: { issueCount: 1 } }
       );
     }
+
     res.status(201).send(result);
+
   } catch (error) {
-    console.error("Error posting issue:", error); 
-    res.status(500).send({ message: "Error posting issue", error: error.message });
+    console.error("Critical Error in /issues POST:", error);
+    res.status(500).send({ 
+      message: "Server error while posting issue", 
+      error: error.message 
+    });
   }
 });
 app.get("/issues/all", async (req, res) => {
