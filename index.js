@@ -221,6 +221,12 @@ app.post("/issues", verifyFBToken, verifyBlocked, async (req, res) => {
   try {
     const issue = req.body;
     const user = await userCollection.findOne({ email: req.decoded_email });
+
+   
+    if (!user) {
+        return res.status(404).send({ message: "User not found" });
+    }
+
     if (!user.isPremium && (user.issueCount || 0) >= 3)
       return res.status(403).send({ message: "Limit reached!" });
 
@@ -232,12 +238,14 @@ app.post("/issues", verifyFBToken, verifyBlocked, async (req, res) => {
     issue.lastUpdatedAt = new Date();
 
     const result = await issuesCollection.insertOne(issue);
+
+   
     await logTracking(
       result.insertedId,
       "Pending",
       "Issue Reported",
       "Citizen",
-      user.displayName
+      user.displayName || "Unknown"
     );
 
     if (!user.isPremium) {
@@ -248,10 +256,10 @@ app.post("/issues", verifyFBToken, verifyBlocked, async (req, res) => {
     }
     res.status(201).send(result);
   } catch (error) {
-    res.status(500).send({ message: "Error posting issue" });
+    console.error("Error posting issue:", error); 
+    res.status(500).send({ message: "Error posting issue", error: error.message });
   }
 });
-
 app.get("/issues/all", async (req, res) => {
   const {
     search,
